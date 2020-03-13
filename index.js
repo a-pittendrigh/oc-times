@@ -1,8 +1,8 @@
-const https = require("https");
 const R = require("ramda");
 const fs = require("fs");
 
 const getParticipantsFromNews = require("./participants");
+const requestJson = require("./make-json-request");
 // replace require("./apikey") with key in the string
 const apiKey = require("./apikey") || "YOUR_KEY_GOES_HERE";
 
@@ -62,7 +62,13 @@ const parseCrimesData = R.pipe(
           dueDate,
           hoursUntilDue
         });
-      }
+      },
+      crime =>
+        R.merge(crime, {
+          remaining: `${Math.floor(crime.hoursUntilDue)} hour(s) ${Math.floor(
+            (crime.hoursUntilDue - Math.floor(crime.hoursUntilDue)) * 60
+          )} minute(s)`
+        })
     )
   ),
   R.filter(crime => crime.dueDate > new Date()),
@@ -76,28 +82,6 @@ const parseCrimesData = R.pipe(
       console.log("Saved!");
     })
 );
-const getOrganisedCrimes = () =>
-  https
-    .get(OcUrl, resp => {
-      let data = "";
-
-      // A chunk of data has been recieved.
-      resp.on("data", chunk => {
-        data += chunk;
-      });
-
-      // The whole response has been received. Print out the result.
-      resp.on("end", () => {
-        const parsedData = JSON.parse(data);
-        // fs.appendFile("crimes.json", data, function(err) {
-        //   if (err) throw err;
-        //   console.log("Saved!");
-        // });
-        parseCrimesData(parsedData);
-      });
-    })
-    .on("error", err => {
-      console.log("Error: " + err.message);
-    });
+const getOrganisedCrimes = () => requestJson(OcUrl, parseCrimesData);
 
 getOrganisedCrimes();
