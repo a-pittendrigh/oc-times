@@ -2,11 +2,13 @@ const https = require("https");
 const R = require("ramda");
 const fs = require("fs");
 
+const getParticipantsFromNews = require("./participants");
+
 const millisPerHour = 36e5;
 const apiKey = "9pXcw2L5eDHgmG5K";
 const baseUrl = "https://api.torn.com/";
 const buildUrl = query => `${baseUrl}${query}&key=${apiKey}`;
-const getOcUrl = () => buildUrl("faction/CRZY?selections=crimenews");
+const OcUrl = buildUrl("faction/CRZY?selections=crimenews");
 const getCrimeType = R.cond([
   [R.contains("blackmail", R.__), R.always("blackmail")],
   [R.contains("kidnap", R.__), R.always("kidnap")],
@@ -15,10 +17,6 @@ const getCrimeType = R.cond([
 const crimeTypePlanningTimes = {
   blackmail: { type: "blackmail", planningTimeInHours: 24 },
   kidnap: { type: "kidnap", planningTimeInHours: 48 }
-};
-const peek = fn => value => {
-  console.log(value);
-  return fn(value);
 };
 const getPlanningTimeInHoursByType = R.ifElse(
   R.equals("unkown"),
@@ -37,28 +35,28 @@ const parseCrimesData = R.pipe(
       R.applySpec({
         timestmap: R.prop("timestamp"),
         news: R.prop("news"),
-        datetime: R.pipe(R.prop("timestamp"), t => new Date(t * 1000)),
+        plannedTime: R.pipe(R.prop("timestamp"), t => new Date(t * 1000)),
         type: R.pipe(R.prop("news"), getCrimeType),
         planningTimeInHours: R.pipe(
           R.prop("news"),
           getCrimeType,
           getPlanningTimeInHoursByType
         ),
-        planningTimeInMinutesByType: R.pipe(
+        planningTimeInMinutes: R.pipe(
           R.prop("news"),
           getCrimeType,
           planningTimeInMinutesByType
-        )
+        ),
+        participants: data => getParticipantsFromNews(data.news)
       }),
       crime => {
-        const plannedTime = R.prop("datetime", crime);
+        const plannedTime = R.prop("plannedTime", crime);
         const now = new Date();
         const planningHours = R.prop("planningTimeInHours", crime);
-        //const dueTime = ;
         const dueDate = new Date(
           new Date(plannedTime).setHours(plannedTime.getHours() + planningHours)
         );
-        const hoursUntilDue = (dueDate - new Date()) / millisPerHour;
+        const hoursUntilDue = (dueDate - now) / millisPerHour;
         return R.merge(crime, {
           dueDate,
           hoursUntilDue
@@ -66,11 +64,20 @@ const parseCrimesData = R.pipe(
       }
     )
   ),
-  v => console.log(v)
+  R.filter(crime => crime.dueDate > new Date()),
+  crimes => {
+    console.log("Crimes planned: ", crimes.length);
+    return crimes;
+  },
+  crimes =>
+    fs.writeFile("crimes.json", JSON.stringify(crimes), function(err) {
+      if (err) throw err;
+      console.log("Saved!");
+    })
 );
 const getOrganisedCrimes = () =>
   https
-    .get(getOcUrl(), resp => {
+    .get(OcUrl, resp => {
       let data = "";
 
       // A chunk of data has been recieved.
@@ -80,17 +87,16 @@ const getOrganisedCrimes = () =>
 
       // The whole response has been received. Print out the result.
       resp.on("end", () => {
-        console.log(JSON.parse(data));
-        fs.appendFile("crimes.json", data, function(err) {
-          if (err) throw err;
-          console.log("Saved!");
-        });
-        parseCrimesData(JSON.parse(data));
+        const parsedData = JSON.parse(data);
+        // fs.appendFile("crimes.json", data, function(err) {
+        //   if (err) throw err;
+        //   console.log("Saved!");
+        // });
+        parseCrimesData(parsedData);
       });
     })
     .on("error", err => {
       console.log("Error: " + err.message);
     });
 
-console.log(getOcUrl());
-console.log(getOrganisedCrimes());
+getOrganisedCrimes();
