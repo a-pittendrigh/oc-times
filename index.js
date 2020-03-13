@@ -3,9 +3,10 @@ const R = require("ramda");
 const fs = require("fs");
 
 const getParticipantsFromNews = require("./participants");
+// replace require("./apikey") with key in the string
+const apiKey = require("./apikey") || "YOUR_KEY_GOES_HERE";
 
 const millisPerHour = 36e5;
-const apiKey = "9pXcw2L5eDHgmG5K";
 const baseUrl = "https://api.torn.com/";
 const buildUrl = query => `${baseUrl}${query}&key=${apiKey}`;
 const OcUrl = buildUrl("faction/CRZY?selections=crimenews");
